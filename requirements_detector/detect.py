@@ -109,6 +109,41 @@ def from_pyproject_toml(toml_file: P) -> List[DetectedRequirement]:
         toml_file = Path(toml_file)
 
     parsed = toml.load(toml_file)
+    project = parsed.get("project", {})
+    dependencies = project.get("dependencies", []).copy()
+    # Get any optional dependencies
+    opt_dependencies = project.get("optional-dependencies", {})
+    # Extend dependencies with any optional dependencies
+    for deps in opt_dependencies.values():
+        dependencies.extend(deps)
+
+    for item in dependencies:
+        req = DetectedRequirement(item, toml_file)
+
+        if req is None:
+            continue
+
+        if req.name is None and "@" in req.url:
+            name, url = req.url.split("@")
+            name = name.split("[")[0]
+            req.name = name.rstrip()
+            req.url = url.lstrip()
+
+        requirements.append(req)
+
+    if parsed.get("tool", {}).get("poetry", {}):
+        requirements.extend(_poetry_from_pyproject_toml(toml_file))
+
+    return requirements
+
+
+def _poetry_from_pyproject_toml(toml_file: P) -> List[DetectedRequirement]:
+    requirements = []
+
+    if isinstance(toml_file, str):
+        toml_file = Path(toml_file)
+
+    parsed = toml.load(toml_file)
     poetry_section = parsed.get("tool", {}).get("poetry", {})
     dependencies = poetry_section.get("dependencies", {})
     dependencies.update(poetry_section.get("dev-dependencies", {}))
@@ -125,7 +160,12 @@ def from_pyproject_toml(toml_file: P) -> List[DetectedRequirement]:
                     requirements.append(req)
                     continue
         parsed_spec = str(parse_constraint(spec))
-        if "," not in parsed_spec and "<" not in parsed_spec and ">" not in parsed_spec and "=" not in parsed_spec:
+        if (
+            "," not in parsed_spec
+            and "<" not in parsed_spec
+            and ">" not in parsed_spec
+            and "=" not in parsed_spec
+        ):
             parsed_spec = f"=={parsed_spec}"
 
         req = DetectedRequirement.parse(f"{name}{parsed_spec}", toml_file)
