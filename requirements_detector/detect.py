@@ -118,7 +118,7 @@ def from_pyproject_toml(toml_file: P) -> List[DetectedRequirement]:
         dependencies.extend(deps)
 
     for item in dependencies:
-        req = DetectedRequirement(item, toml_file)
+        req = DetectedRequirement.parse(item, toml_file)
 
         if req is None:
             continue
